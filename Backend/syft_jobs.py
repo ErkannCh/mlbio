@@ -28,6 +28,14 @@ def train_one_round(
     from PIL import Image
     from torch.utils.data import DataLoader, Dataset, Subset
 
+    def _select_device() -> torch.device:
+        requested = os.getenv("MLBIO_DEVICE", "").strip().lower()
+        if requested in {"cpu", "cuda"}:
+            if requested == "cuda" and not torch.cuda.is_available():
+                return torch.device("cpu")
+            return torch.device(requested)
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     if hasattr(global_state, "syft_action_data"):
         global_state = global_state.syft_action_data
     if hasattr(client_id, "syft_action_data"):
@@ -105,8 +113,11 @@ def train_one_round(
     class_weights = torch.FloatTensor(weights)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
+    device = _select_device()
     model = HealthCNN()
     model.load_state_dict(global_state)
+    model.to(device)
+    criterion.to(device)
 
     opt = optim.Adam(model.parameters(), lr=lr)
     start = int(client_id) * int(n_data)
@@ -116,10 +127,11 @@ def train_one_round(
     model.train()
     for _ in range(int(epochs)):
         for x, y in loader:
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
             opt.zero_grad()
             loss = criterion(model(x), y)
             loss.backward()
             opt.step()
 
-    return model.state_dict()
-
+    return {k: v.detach().cpu() for k, v in model.state_dict().items()}

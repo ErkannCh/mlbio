@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 from typing import Any
 
 import syft as sy
@@ -10,6 +11,16 @@ from torch.utils.data import DataLoader, Subset
 
 from Backend.prepare import create_dataset
 from Backend.utils import HealthCNN
+
+
+def _select_device() -> torch.device:
+    requested = os.getenv("MLBIO_DEVICE", "").strip().lower()
+    if requested in {"cpu", "cuda"}:
+        if requested == "cuda" and not torch.cuda.is_available():
+            print("MLBIO_DEVICE=cuda demandé, mais CUDA indisponible -> fallback CPU")
+            return torch.device("cpu")
+        return torch.device(requested)
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def _fedavg(state_dicts: list[dict[str, Any]]) -> dict[str, Any]:
@@ -42,6 +53,9 @@ def main(
 
     server_handles = []
     try:
+        device = _select_device()
+        print(f"Backend device: {device}")
+
         server_handles = [
             sy.orchestra.launch(
                 name=f"datasite-{i}",
@@ -83,6 +97,7 @@ def main(
         test_loader = DataLoader(Subset(full_dataset, test_indices), batch_size=32)
 
         global_model = HealthCNN()
+        global_model.to(device)
 
         for round_idx in range(rounds):
             local_states: list[dict[str, Any]] = []
@@ -116,6 +131,8 @@ def main(
         correct, total = 0, 0
         with torch.no_grad():
             for x, y in test_loader:
+                x = x.to(device, non_blocking=True)
+                y = y.to(device, non_blocking=True)
                 outputs = global_model(x)
                 _, predicted = torch.max(outputs.data, 1)
                 total += y.size(0)
