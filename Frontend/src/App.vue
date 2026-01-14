@@ -27,24 +27,7 @@ onMounted(() => {
     <header class="topbar">
       <div class="topbar-inner">
         <div class="brand">
-          <div class="logo" aria-hidden="true" />
-          <div>
-            <h1>Federated Learning — PySyft</h1>
-            <p>HAM10000 · FedAvg · clients with private data</p>
-          </div>
-        </div>
-
-        <div class="pill">
-          <span>API</span>
-          <code>/fl</code>
-          <span class="kbd">{{ themeLabel }}</span>
-          <button
-            class="btn btn-ghost"
-            type="button"
-            @click="applyTheme(theme === 'dark' ? 'light' : 'dark')"
-          >
-            Toggle theme
-          </button>
+          <h1>Federated Learning On Skin Classification</h1>
         </div>
       </div>
     </header>
@@ -54,4 +37,3 @@ onMounted(() => {
     </main>
   </div>
 </template>
-

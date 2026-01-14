@@ -10,14 +10,14 @@ const info = ref<{ dataset: string; expected_total_size: number; default_test_si
 
 const nClients = ref(5)
 const rounds = ref(1)
-const epochs = ref(1)
+const epochs = ref(2)
 const lr = ref(0.0005)
 const testSize = ref(500)
 
 const fractionChoices = ref([
-  { v: 1.0, label: '1 / n_clients (baseline)', enabled: true },
-  { v: 0.5, label: '0.5 × (1 / n_clients)', enabled: true },
-  { v: 0.1, label: '0.1 × (1 / n_clients)', enabled: true },
+  { v: 1.0, label: '1 / n_clients', enabled: true },
+  { v: 0.5, label: '0.5 × (1 / n_clients)', enabled: false },
+  { v: 0.1, label: '0.1 × (1 / n_clients)', enabled: false },
 ])
 const customFractionsText = ref('')
 
@@ -142,26 +142,21 @@ onMounted(async () => {
     <section class="card">
       <div class="card-header">
         <h2>Run federated training</h2>
-        <p>
-          Each datasite holds a private subset of HAM10000. The server orchestrates PySyft jobs and aggregates with
-          FedAvg.
-        </p>
       </div>
       <div class="card-body">
         <div class="grid-2">
           <div class="field">
             <label>
               <span>Clients</span>
-              <span class="small">n_clients</span>
+              <span class="small">nombre de clients</span>
             </label>
             <input v-model.number="nClients" type="number" min="1" max="50" :disabled="busy" />
-            <div class="hint">More clients → smaller per-client shard.</div>
           </div>
 
           <div class="field">
             <label>
               <span>Rounds</span>
-              <span class="small">global aggregation steps</span>
+              <span class="small">global aggregation étapes</span>
             </label>
             <input v-model.number="rounds" type="number" min="1" max="50" :disabled="busy" />
           </div>
@@ -169,7 +164,7 @@ onMounted(async () => {
           <div class="field">
             <label>
               <span>Local epochs</span>
-              <span class="small">per client</span>
+              <span class="small">par client</span>
             </label>
             <input v-model.number="epochs" type="number" min="1" max="50" :disabled="busy" />
           </div>
@@ -177,7 +172,7 @@ onMounted(async () => {
           <div class="field">
             <label>
               <span>Learning rate</span>
-              <span class="small">Adam</span>
+              <span class="small">adam</span>
             </label>
             <input v-model.number="lr" type="number" step="0.0001" min="0.000001" :disabled="busy" />
           </div>
@@ -185,7 +180,7 @@ onMounted(async () => {
           <div class="field">
             <label>
               <span>Test size</span>
-              <span class="small">held out</span>
+              <span class="small">taille du jeu d'évaluation</span>
             </label>
             <input v-model.number="testSize" type="number" min="1" :disabled="busy" />
             <div class="hint">
@@ -195,14 +190,8 @@ onMounted(async () => {
 
           <div class="field">
             <label>
-              <span>Fractions</span>
-              <span class="small">of (1 / n_clients)</span>
+              <span>Scenarios</span>
             </label>
-            <div class="hint" style="margin-top: 0">
-              Select the required scenarios, or add more:
-              <code style="font-family: var(--mono)">1.0</code>, <code style="font-family: var(--mono)">0.5</code>,
-              <code style="font-family: var(--mono)">0.1</code>.
-            </div>
             <div style="display: grid; gap: 8px; margin-top: 10px">
               <label v-for="c in fractionChoices" :key="c.v" style="display: flex; gap: 10px; align-items: center">
                 <input v-model="c.enabled" type="checkbox" :disabled="busy" style="width: auto" />
@@ -234,16 +223,10 @@ onMounted(async () => {
 
     <aside class="card">
       <div class="card-header">
-        <h2>Preview & results</h2>
-        <p>Data per client for each scenario + your accuracy table.</p>
+        <h2>Resultats</h2>
       </div>
       <div class="card-body">
-        <div class="hint" style="margin-bottom: 10px">
-          Dataset: <strong>{{ info?.dataset ?? 'HAM10000' }}</strong> · Expected total size:
-          <code style="font-family: var(--mono)">{{ info?.expected_total_size ?? 10015 }}</code>
-        </div>
-
-        <table class="table" style="margin-bottom: 14px">
+        <!-- <table class="table" style="margin-bottom: 14px">
           <thead>
             <tr>
               <th>Fraction</th>
@@ -256,7 +239,7 @@ onMounted(async () => {
               <td><code style="font-family: var(--mono)">{{ r.nData }}</code></td>
             </tr>
           </tbody>
-        </table>
+        </table> -->
 
         <div v-if="results && results.length">
           <ResultTable :results="results" />
