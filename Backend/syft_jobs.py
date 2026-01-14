@@ -36,6 +36,16 @@ def train_one_round(
             return torch.device(requested)
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    def _maybe_log_device(device: torch.device) -> None:
+        if os.getenv("MLBIO_LOG_DEVICE", "0").strip() != "1":
+            return
+        cuda_available = torch.cuda.is_available()
+        cuda_name = torch.cuda.get_device_name(0) if cuda_available else None
+        print(
+            f"[train_one_round] device={device} cuda_available={cuda_available} cuda_name={cuda_name}",
+            flush=True,
+        )
+
     if hasattr(global_state, "syft_action_data"):
         global_state = global_state.syft_action_data
     if hasattr(client_id, "syft_action_data"):
@@ -114,6 +124,9 @@ def train_one_round(
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     device = _select_device()
+    _maybe_log_device(device)
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
     model = HealthCNN()
     model.load_state_dict(global_state)
     model.to(device)
@@ -122,7 +135,14 @@ def train_one_round(
     opt = optim.Adam(model.parameters(), lr=lr)
     start = int(client_id) * int(n_data)
     end = (int(client_id) + 1) * int(n_data)
-    loader = DataLoader(Subset(full_dataset, range(start, end)), batch_size=batch_size)
+    num_workers = int(os.getenv("MLBIO_NUM_WORKERS", "0"))
+    loader = DataLoader(
+        Subset(full_dataset, range(start, end)),
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=(device.type == "cuda"),
+    )
 
     model.train()
     for _ in range(int(epochs)):

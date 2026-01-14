@@ -51,5 +51,7 @@ Quand `status == "succeeded"`, la réponse contient une liste `results` (équiva
 
 ## Notes
 
+- GPU : si PyTorch a été installé avec support CUDA et qu’un GPU est disponible, l’entraînement et l’évaluation utilisent automatiquement `cuda`.
+  - Forcer le device : `MLBIO_DEVICE=cuda` ou `MLBIO_DEVICE=cpu` (ex: `MLBIO_DEVICE=cuda uvicorn Backend.app:app ...`).
 - En mode “simulation locale”, chaque client est un datasite PySyft local (`sy.orchestra.launch(..., server_type=\"datasite\")`).
 - Le premier run peut être long (téléchargement HAM10000 via `kagglehub` en cache).

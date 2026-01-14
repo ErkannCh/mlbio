@@ -104,7 +104,12 @@ def main(
         test_size = int(test_size)
         test_size = max(1, min(test_size, len(full_dataset)))
         test_indices = range(len(full_dataset) - test_size, len(full_dataset))
-        test_loader = DataLoader(Subset(full_dataset, test_indices), batch_size=32)
+        test_loader = DataLoader(
+            Subset(full_dataset, test_indices),
+            batch_size=32,
+            num_workers=int(os.getenv("MLBIO_NUM_WORKERS", "0")),
+            pin_memory=(device.type == "cuda"),
+        )
 
         global_model = HealthCNN()
         global_model.to(device)
