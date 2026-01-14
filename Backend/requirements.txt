@@ -1,0 +1,10 @@
+pandas
+Pillow
+torch
+torchvision
+kagglehub
+syft>=0.9.5
+sniffio
+fastapi
+uvicorn
+pydantic
