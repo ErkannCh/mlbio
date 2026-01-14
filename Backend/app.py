@@ -20,12 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve built frontend if present (optional).
-frontend_dist = Path(__file__).resolve().parents[1] / "Frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
-
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# Serve built frontend if present (optional).
+frontend_dist = Path(__file__).resolve().parents[1] / "Frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")

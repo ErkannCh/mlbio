@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-from pathlib import Path
 from typing import Any
 
 import syft as sy
@@ -40,10 +39,6 @@ def main(
     test_size: int = 500,
 ) -> float:
     from Backend.syft_jobs import train_one_round
-
-    repo_root = Path(__file__).resolve().parent
-    if str(repo_root) not in __import__("sys").path:
-        __import__("sys").path.insert(0, str(repo_root))
 
     server_handles = []
     try:
