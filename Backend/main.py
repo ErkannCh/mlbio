@@ -23,6 +23,16 @@ def _select_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def _state_dict_to_cpu(state_dict: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for k, v in state_dict.items():
+        if isinstance(v, torch.Tensor):
+            out[k] = v.detach().cpu()
+        else:
+            out[k] = v
+    return out
+
+
 def _fedavg(state_dicts: list[dict[str, Any]]) -> dict[str, Any]:
     fed_dict: dict[str, Any] = {}
     keys = list(state_dicts[0].keys())
@@ -101,7 +111,8 @@ def main(
 
         for round_idx in range(rounds):
             local_states: list[dict[str, Any]] = []
-            global_state = copy.deepcopy(global_model.state_dict())
+            # PySyft serialization expects CPU tensors for upload/calls.
+            global_state = _state_dict_to_cpu(copy.deepcopy(global_model.state_dict()))
 
             for i, c in enumerate(client_handles):
                 remote_args = _upload_call_args(
