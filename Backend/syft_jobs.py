@@ -21,6 +21,7 @@ def train_one_round(
 
     import kagglehub
     import pandas as pd
+    import time
     import torch
     import torch.nn as nn
     import torch.optim as optim
@@ -144,14 +145,45 @@ def train_one_round(
         pin_memory=(device.type == "cuda"),
     )
 
+    epoch_losses: list[float] = []
+    epoch_accs: list[float] = []
+    epoch_state_dicts: list[dict[str, Any]] = []
+    t0 = time.perf_counter()
     model.train()
     for _ in range(int(epochs)):
+        loss_sum = torch.zeros((), device=device)
+        correct = torch.zeros((), device=device)
+        seen = 0
         for x, y in loader:
             x = x.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
             opt.zero_grad()
-            loss = criterion(model(x), y)
+            logits = model(x)
+            loss = criterion(logits, y)
             loss.backward()
             opt.step()
+            batch = y.numel()
+            seen += batch
+            loss_sum += loss.detach() * batch
+            correct += (logits.argmax(dim=1) == y).sum().detach()
+        if seen > 0:
+            epoch_losses.append(float((loss_sum / seen).item()))
+            epoch_accs.append(float((correct / seen).item()))
+        else:
+            epoch_losses.append(float("nan"))
+            epoch_accs.append(float("nan"))
+        epoch_state_dicts.append({k: v.detach().cpu() for k, v in model.state_dict().items()})
+    duration_s = float(time.perf_counter() - t0)
 
-    return {k: v.detach().cpu() for k, v in model.state_dict().items()}
+    return {
+        "state_dict": epoch_state_dicts[-1] if epoch_state_dicts else {k: v.detach().cpu() for k, v in model.state_dict().items()},
+        "epoch_state_dicts": epoch_state_dicts,
+        "metrics": {
+            "client_id": int(client_id),
+            "n_samples": int(seen),
+            "epoch_loss": epoch_losses,
+            "epoch_acc": epoch_accs,
+            "duration_s": duration_s,
+            "device": str(device),
+        },
+    }

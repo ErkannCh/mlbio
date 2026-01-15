@@ -32,26 +32,22 @@ La contrainte du sujet est respectée en fixant, pour chaque configuration :
 Exemple :
 
 ```bash
-curl -X POST http://localhost:8000/fl/run \\
-  -H 'content-type: application/json' \\
-  -d '{\"n_clients\": 5, \"rounds\": 1, \"epochs\": 1, \"fractions\": [1.0, 0.5, 0.1]}'
+curl -X POST http://localhost:8000/fl/run \
+  -H 'content-type: application/json' \
+  -d '{"n_clients": 5, "rounds": 1, "epochs": 1, "fractions": [1.0, 0.5, 0.1]}'
 ```
 
-La route `/fl/run` démarre un job et renvoie un `job_id`. Pour récupérer les résultats :
+La route `/fl/run` démarre un job et renvoie un `job_id`.
 
-```bash
-curl http://localhost:8000/fl/run/<job_id>
-```
-
-Quand `status == "succeeded"`, la réponse contient une liste `results` (équivalent “table”) avec :
-
-- `fraction_of_1_over_n_clients` (`1.0`, `0.5`, `0.1`)
-- `n_data_per_client`
-- `accuracy_percent`
+- Résultats (polling) : `GET /fl/run/<job_id>`
+- Courbes live (SSE) : `GET /fl/stream/<job_id>`
 
 ## Notes
 
 - GPU : si PyTorch a été installé avec support CUDA et qu’un GPU est disponible, l’entraînement et l’évaluation utilisent automatiquement `cuda`.
   - Forcer le device : `MLBIO_DEVICE=cuda` ou `MLBIO_DEVICE=cpu` (ex: `MLBIO_DEVICE=cuda uvicorn Backend.app:app ...`).
-- En mode “simulation locale”, chaque client est un datasite PySyft local (`sy.orchestra.launch(..., server_type=\"datasite\")`).
+- Perf DataLoader : `MLBIO_NUM_WORKERS=4` (ou plus selon CPU) peut accélérer le chargement quand `cuda` est utilisé (pinning activé).
+- Debug device côté datasites : `MLBIO_LOG_DEVICE=1` (prints `[train_one_round] device=...`).
+- En mode “simulation locale”, chaque client est un datasite PySyft local (`sy.orchestra.launch(..., server_type="datasite")`).
 - Le premier run peut être long (téléchargement HAM10000 via `kagglehub` en cache).
+

@@ -3,9 +3,11 @@ from __future__ import annotations
 import copy
 import os
 from typing import Any
+from collections.abc import Callable
 
 import syft as sy
 import torch
+import torch.nn as nn
 from syft.service.dataset.dataset import CreateAsset, CreateDataset
 from torch.utils.data import DataLoader, Subset
 
@@ -58,6 +60,7 @@ def main(
     epochs: int = 5,
     lr: float = 5e-4,
     test_size: int = 500,
+    event_cb: Callable[[dict[str, Any]], None] | None = None,
 ) -> float:
     from Backend.syft_jobs import train_one_round
 
@@ -65,6 +68,8 @@ def main(
     try:
         device = _select_device()
         print(f"Backend device: {device}")
+        if event_cb is not None:
+            event_cb({"type": "backend_device", "device": str(device)})
 
         server_handles = [
             sy.orchestra.launch(
@@ -110,6 +115,7 @@ def main(
             num_workers=int(os.getenv("MLBIO_NUM_WORKERS", "0")),
             pin_memory=(device.type == "cuda"),
         )
+        test_criterion = nn.CrossEntropyLoss()
 
         global_model = HealthCNN()
         global_model.to(device)
@@ -139,9 +145,108 @@ def main(
                     epochs=remote_args["epochs"],
                     lr=remote_args["lr"],
                 )
-                local_states.append(action_obj.get())
+                result = action_obj.get()
+                if isinstance(result, dict) and "state_dict" in result:
+                    local_states.append(result["state_dict"])
+                    if event_cb is not None and isinstance(result.get("metrics"), dict):
+                        # Evaluate the *client* model on the server-side test set.
+                        # If per-epoch checkpoints are provided, compute test metrics per epoch
+                        # so the frontend can display acc/loss vs epochs based on `test_size`.
+                        epoch_states = result.get("epoch_state_dicts")
+                        if isinstance(epoch_states, list) and epoch_states:
+                            epoch_test_acc: list[float] = []
+                            epoch_test_loss: list[float] = []
+                            n_test_samples: int = 0
+                            for sd in epoch_states:
+                                client_model = HealthCNN()
+                                client_model.load_state_dict(sd)
+                                client_model.to(device)
+                                client_model.eval()
+                                loss_sum = 0.0
+                                correct, total = 0, 0
+                                with torch.no_grad():
+                                    for x, y in test_loader:
+                                        x = x.to(device, non_blocking=True)
+                                        y = y.to(device, non_blocking=True)
+                                        outputs = client_model(x)
+                                        loss = test_criterion(outputs, y)
+                                        loss_sum += float(loss.item()) * y.size(0)
+                                        _, predicted = torch.max(outputs.data, 1)
+                                        total += y.size(0)
+                                        correct += (predicted == y).sum().item()
+                                n_test_samples = int(total)
+                                epoch_test_acc.append(float(100 * correct / max(1, total)))
+                                epoch_test_loss.append(float(loss_sum / max(1, total)))
+                            client_test_acc = epoch_test_acc[-1]
+                            client_test_loss = epoch_test_loss[-1]
+                        else:
+                            client_model = HealthCNN()
+                            client_model.load_state_dict(result["state_dict"])
+                            client_model.to(device)
+                            client_model.eval()
+                            loss_sum = 0.0
+                            correct, total = 0, 0
+                            with torch.no_grad():
+                                for x, y in test_loader:
+                                    x = x.to(device, non_blocking=True)
+                                    y = y.to(device, non_blocking=True)
+                                    outputs = client_model(x)
+                                    loss = test_criterion(outputs, y)
+                                    loss_sum += float(loss.item()) * y.size(0)
+                                    _, predicted = torch.max(outputs.data, 1)
+                                    total += y.size(0)
+                                    correct += (predicted == y).sum().item()
+                            client_test_acc = float(100 * correct / max(1, total))
+                            client_test_loss = float(loss_sum / max(1, total))
+                            epoch_test_acc = None
+                            epoch_test_loss = None
+                            n_test_samples = int(total)
+
+                        event_cb(
+                            {
+                                "type": "client_metrics",
+                                "round": int(round_idx),
+                                "client_id": int(i),
+                                "metrics": {
+                                    **result["metrics"],
+                                    "test_accuracy_percent": float(client_test_acc),
+                                    "test_loss": float(client_test_loss),
+                                    "n_test_samples": int(n_test_samples),
+                                    "epoch_test_acc": epoch_test_acc,
+                                    "epoch_test_loss": epoch_test_loss,
+                                },
+                            }
+                        )
+                else:
+                    # Backward compatibility: older train_one_round returned a raw state_dict.
+                    local_states.append(result)
 
             global_model.load_state_dict(_fedavg(local_states))
+
+            global_model.eval()
+            loss_sum = 0.0
+            correct, total = 0, 0
+            with torch.no_grad():
+                for x, y in test_loader:
+                    x = x.to(device, non_blocking=True)
+                    y = y.to(device, non_blocking=True)
+                    outputs = global_model(x)
+                    loss = test_criterion(outputs, y)
+                    loss_sum += float(loss.item()) * y.size(0)
+                    _, predicted = torch.max(outputs.data, 1)
+                    total += y.size(0)
+                    correct += (predicted == y).sum().item()
+            round_acc = 100 * correct / max(1, total)
+            round_loss = loss_sum / max(1, total)
+            if event_cb is not None:
+                event_cb(
+                    {
+                        "type": "global_metrics",
+                        "round": int(round_idx),
+                        "test_accuracy_percent": float(round_acc),
+                        "test_loss": float(round_loss),
+                    }
+                )
 
         global_model.eval()
         correct, total = 0, 0
